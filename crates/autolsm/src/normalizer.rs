@@ -88,7 +88,7 @@ async fn process_observation(
     resolver: &Arc<Mutex<Resolver>>,
 ) {
     let tgid = (event.pid_tgid >> 32) as u32;
-    let (scontext, scontext_type) = resolver.lock().await.resolve(tgid);
+    let (scontext, scontext_type) = resolver.lock().await.resolve(tgid).await;
 
     let hook = HookId::from_u32(event.hook_id).unwrap_or(HookId::FileOpen);
     let tclass = hook_to_class(hook, event);
