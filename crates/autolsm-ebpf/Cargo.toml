@@ -1,0 +1,19 @@
+[package]
+name = "autolsm-ebpf"
+version = "0.1.0"
+edition = "2021"
+
+# This crate is NOT in the workspace. It's built by xtask for target bpfel-unknown-none.
+# Dependencies must be self-contained here since workspace deps aren't inherited.
+
+[dependencies]
+aya-ebpf = "0.2"
+aya-log-ebpf = "0.2"
+autolsm-common = { path = "../autolsm-common" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+
+[lib]
+path = "src/main.rs"

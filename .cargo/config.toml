@@ -1,0 +1,6 @@
+[build]
+# xtask handles eBPF builds via -Zbuild-std
+rustflags = []
+
+[target.bpfel-unknown-none]
+rustflags = ["-C", "link-arg=-z", "nostart-stop-gc"]

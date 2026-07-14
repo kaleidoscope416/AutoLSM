@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/autolsm-common",
+    "crates/autolsm",
+    "xtask",
+]
+
+# autolsm-ebpf is NOT a workspace member — it's built separately
+# by xtask for the bpfel-unknown-none target with -Zbuild-std=core
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+lru = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+regex = "1"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+chrono = { version = "0.4", features = ["serde"] }
+
+autolsm-common = { path = "crates/autolsm-common" }
+
+[profile.release]
+lto = true
+opt-level = "s"
+strip = true

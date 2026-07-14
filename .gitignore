@@ -1,0 +1,14 @@
+# Build artifacts
+target/
+**/*.o
+**/*.so
+**/*.dylib
+
+# IDE
+.vscode/
+.idea/
+
+# Other
+task.md
+__pycache__/
+*.pyc
