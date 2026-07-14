@@ -18,9 +18,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-reqwest = { workspace = true }
-chrono = { workspace = true }
 seahash = "4.1.0"
+reqwest.workspace = true
 
 [build-dependencies]
 anyhow = { workspace = true }

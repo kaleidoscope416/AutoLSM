@@ -8,6 +8,7 @@
 mod audit;
 mod collector;
 mod llm;
+mod state_machine;
 mod normalizer;
 mod resolver;
 mod selinux;

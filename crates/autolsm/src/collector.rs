@@ -14,7 +14,7 @@ pub async fn run(
     target_cgroups: Vec<u64>,
     ringbuf_size: u32,
     tx: mpsc::Sender<NormalizerInput>,
-    resolver: Arc<Mutex<Resolver>>,
+    _resolver: Arc<Mutex<Resolver>>,
 ) -> anyhow::Result<()> {
     tracing::info!("Loading eBPF programs (ringbuf={} bytes)", ringbuf_size);
 
@@ -77,7 +77,7 @@ pub async fn run(
         hook_names.len(),
     );
 
-    let mut dropped_count: u64 = 0;
+    let _dropped_count: u64 = 0;
     let mut event_buf = [0u8; std::mem::size_of::<ObservationEvent>()];
 
     loop {
@@ -91,8 +91,8 @@ pub async fn run(
                 let event: ObservationEvent =
                     unsafe { std::ptr::read(event_buf.as_ptr() as *const ObservationEvent) };
 
-                let tgid = (event.pid_tgid >> 32) as u32;
-                let _ = resolver.lock().await.resolve(tgid);
+
+                // Normalizer handles authoritative PID→context resolution.
 
                 if tx.send(NormalizerInput::Observation(event)).await.is_err() {
                     tracing::warn!("normalizer channel closed — collector exiting");
@@ -101,10 +101,6 @@ pub async fn run(
             }
         }
 
-        if dropped_count > 0 {
-            tracing::debug!("dropped events since last report: {}", dropped_count);
-            dropped_count = 0;
-        }
 
         guard.clear_ready();
     }

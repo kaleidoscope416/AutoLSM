@@ -9,12 +9,9 @@ use tokio::time::{interval, Duration};
 
 use crate::resolver::Resolver;
 
-/// Maximum unique entries before forced batch emission.
 const BATCH_MAX: usize = 64;
-/// Maximum LRU size for SeenSet.
 const SEEN_MAX: usize = 10000;
 
-/// Run the normalizer: deduplicate events, batch by time window, send to LLM.
 pub async fn run(
     mut rx: mpsc::Receiver<NormalizerInput>,
     tx: mpsc::Sender<Vec<NormalizedAccess>>,
@@ -42,7 +39,6 @@ pub async fn run(
                         ).await;
                     }
                     NormalizerInput::Denial(denial) => {
-                        // Denials already have scontext/tcontext/tclass/perms — insert directly.
                         for perm in &denial.perms {
                             let key = (
                                 denial.scontext_type.clone(),
@@ -57,7 +53,7 @@ pub async fn run(
                                 tcontext_type: denial.tcontext_type.clone(),
                                 tclass: denial.tclass.clone(),
                                 perm: perm.clone(),
-                                hook_id: 0, // not applicable for denials
+                                hook_id: 0,
                                 count: 0,
                                 first_seen_ns: 0,
                                 last_seen_ns: 0,
@@ -67,8 +63,6 @@ pub async fn run(
                         }
                     }
                 }
-
-                // Force emit if batch size exceeds threshold
                 if batch.len() >= BATCH_MAX {
                     emit_batch(&mut batch, &mut seen, &tx).await;
                 }
@@ -84,7 +78,6 @@ pub async fn run(
             }
         }
     }
-
     Ok(())
 }
 
@@ -97,110 +90,116 @@ async fn process_observation(
     let tgid = (event.pid_tgid >> 32) as u32;
     let (scontext, scontext_type) = resolver.lock().await.resolve(tgid);
 
-    // Map hook_id → (tclass, perm) with family disambiguation for sockets
     let hook = HookId::from_u32(event.hook_id).unwrap_or(HookId::FileOpen);
+    let tclass = hook_to_class(hook, event);
 
-    let (tclass, perm) = match hook_to_class_perm(hook, event) {
-        Some(v) => v,
-        None => return, // unknown hook → skip
+    // Decompose: file_permission may produce multiple perms
+    let perms_to_emit: Vec<&'static str> = match hook {
+        HookId::FilePermission => {
+            let mask = unsafe { event.object.file.flags };
+            let mut perms = Vec::new();
+            if mask & 0x01 != 0 { perms.push("read"); }
+            if mask & 0x02 != 0 { perms.push("write"); }
+            if mask & 0x04 != 0 { perms.push("append"); }
+            if mask & 0x08 != 0 { perms.push("execute"); }
+            if perms.is_empty() { perms.push("getattr"); }
+            perms
+        }
+        _ => {
+            match hook_to_perm(hook, event) {
+                Some(p) => vec![p],
+                None => return,
+            }
+        }
     };
 
-    // Resolve tcontext from object info (best-effort via matchpathcon or socket info)
+    // Resolve tcontext
     let (tcontext, tcontext_type) = resolve_tcontext(event, hook, &tclass);
 
-    // Build unique key
-    let key = (
-        scontext_type.clone(),
-        tcontext_type.clone(),
-        tclass.to_string(),
-        perm.to_string(),
-    );
-
-    // Delta detection
-    let hash = seahash::hash(
-        &[
-            key.0.as_bytes(),
-            key.1.as_bytes(),
-            key.2.as_bytes(),
-            key.3.as_bytes(),
-        ].concat(),
-    );
-    let is_new = !seen.contains(&hash);
-    if is_new {
-        seen.put(hash, 1);
+    // Drop unresolved events per architecture §4.2.2
+    if tcontext_type == "unresolved_t" {
+        return;
     }
 
-    let entry = batch.entry(key.clone()).or_insert_with(|| NormalizedAccess {
-        scontext,
-        scontext_type: key.0,
-        tcontext,
-        tcontext_type: key.1,
-        tclass: key.2,
-        perm: key.3,
-        hook_id: event.hook_id,
-        count: 0,
-        first_seen_ns: event.timestamp_ns,
-        last_seen_ns: event.timestamp_ns,
-        is_new,
-    });
-    entry.count += 1;
-    entry.last_seen_ns = event.timestamp_ns;
+    for perm in &perms_to_emit {
+        let key = (
+            scontext_type.clone(),
+            tcontext_type.clone(),
+            tclass.to_string(),
+            perm.to_string(),
+        );
+
+        let hash = hash_key(&key.0, &key.1, &key.2, perm);
+        let is_new = !seen.contains(&hash);
+        if is_new {
+            seen.put(hash, 1);
+        }
+
+        let entry = batch.entry(key.clone()).or_insert_with(|| NormalizedAccess {
+            scontext: scontext.clone(),
+            scontext_type: key.0.clone(),
+            tcontext: tcontext.clone(),
+            tcontext_type: key.1.clone(),
+            tclass: key.2.clone(),
+            perm: key.3.clone(),
+            hook_id: event.hook_id,
+            count: 0,
+            first_seen_ns: event.timestamp_ns,
+            last_seen_ns: event.timestamp_ns,
+            is_new,
+        });
+        entry.count += 1;
+        entry.last_seen_ns = event.timestamp_ns;
+    }
 }
 
-/// Map hook_id + socket family/proto → (tclass, perm).
-fn hook_to_class_perm(hook: HookId, event: &ObservationEvent) -> Option<(&'static str, &'static str)> {
+fn hook_to_class(hook: HookId, event: &ObservationEvent) -> &'static str {
     match hook {
-        HookId::FileOpen => Some(("file", "open")),
-        HookId::FilePermission => {
-            // permission mask is in event.object.file.flags
-            let mask = unsafe { event.object.file.flags };
-            if mask & 0x01 != 0 { Some(("file", "read")) }
-            else if mask & 0x02 != 0 { Some(("file", "write")) }
-            else if mask & 0x04 != 0 { Some(("file", "append")) }
-            else if mask & 0x08 != 0 { Some(("file", "execute")) }
-            else { Some(("file", "getattr")) }
-        }
-        HookId::FileIoctl => Some(("file", "ioctl")),
-        HookId::FileLock => Some(("file", "lock")),
-        HookId::FileReceive => Some(("file", "open")),
-        HookId::SocketBind => {
+        HookId::FileOpen | HookId::FilePermission | HookId::FileIoctl
+        | HookId::FileLock | HookId::FileReceive => "file",
+        HookId::SocketBind | HookId::SocketConnect => {
             let family = unsafe { event.object.sock.family };
             let proto_num = unsafe { event.object.sock.proto };
             match (family, proto_num) {
                 (af::AF_INET, proto::IPPROTO_TCP) | (af::AF_INET6, proto::IPPROTO_TCP) =>
-                    Some(("tcp_socket", "name_bind")),
+                    "tcp_socket",
                 (af::AF_INET, proto::IPPROTO_UDP) | (af::AF_INET6, proto::IPPROTO_UDP) =>
-                    Some(("udp_socket", "name_bind")),
-                (af::AF_UNIX, _) => Some(("unix_stream_socket", "name_bind")),
-                _ => Some(("socket", "name_bind")),
+                    "udp_socket",
+                (af::AF_UNIX, _) => "unix_stream_socket",
+                _ => "socket",
             }
         }
-        HookId::SocketConnect => {
-            let family = unsafe { event.object.sock.family };
-            let proto_num = unsafe { event.object.sock.proto };
-            match (family, proto_num) {
-                (af::AF_INET, proto::IPPROTO_TCP) | (af::AF_INET6, proto::IPPROTO_TCP) =>
-                    Some(("tcp_socket", "name_connect")),
-                (af::AF_INET, proto::IPPROTO_UDP) | (af::AF_INET6, proto::IPPROTO_UDP) =>
-                    Some(("udp_socket", "name_connect")),
-                (af::AF_UNIX, _) => Some(("unix_stream_socket", "name_connect")),
-                _ => Some(("socket", "name_connect")),
-            }
-        }
-        HookId::SocketListen => Some(("tcp_socket", "listen")),
-        HookId::SocketAccept => Some(("tcp_socket", "accept")),
-        HookId::SocketSendmsg => Some(("socket", "write")),
-        HookId::SocketRecvmsg => Some(("socket", "read")),
-        HookId::UnixStreamConnect => Some(("unix_stream_socket", "connectto")),
-        HookId::UnixMaySend => Some(("unix_dgram_socket", "sendto")),
-        HookId::TaskSetpgid => Some(("process", "setpgid")),
-        HookId::TaskGetpgid => Some(("process", "getpgid")),
-        HookId::TaskSetsched => Some(("process", "setsched")),
-        HookId::TaskSetrlimit => Some(("process", "setrlimit")),
+        HookId::SocketListen | HookId::SocketAccept => "tcp_socket",
+        HookId::SocketSendmsg | HookId::SocketRecvmsg => "socket",
+        HookId::UnixStreamConnect => "unix_stream_socket",
+        HookId::UnixMaySend => "unix_dgram_socket",
+        HookId::TaskSetpgid | HookId::TaskGetpgid | HookId::TaskSetsched
+        | HookId::TaskSetrlimit => "process",
     }
 }
 
-/// Resolve target context from observation event.
+fn hook_to_perm(hook: HookId, _event: &ObservationEvent) -> Option<&'static str> {
+    match hook {
+        HookId::FileOpen => Some("open"),
+        HookId::FilePermission => Some("read"), // unused: perms are decomposed above
+        HookId::FileIoctl => Some("ioctl"),
+        HookId::FileLock => Some("lock"),
+        HookId::FileReceive => Some("open"),
+        HookId::SocketBind => Some("name_bind"),
+        HookId::SocketConnect => Some("name_connect"),
+        HookId::SocketListen => Some("listen"),
+        HookId::SocketAccept => Some("accept"),
+        HookId::SocketSendmsg => Some("write"),
+        HookId::SocketRecvmsg => Some("read"),
+        HookId::UnixStreamConnect => Some("connectto"),
+        HookId::UnixMaySend => Some("sendto"),
+        HookId::TaskSetpgid => Some("setpgid"),
+        HookId::TaskGetpgid => Some("getpgid"),
+        HookId::TaskSetsched => Some("setsched"),
+        HookId::TaskSetrlimit => Some("setrlimit"),
+    }
+}
+
 fn resolve_tcontext(
     event: &ObservationEvent,
     hook: HookId,
@@ -209,7 +208,6 @@ fn resolve_tcontext(
     match hook {
         HookId::FileOpen | HookId::FilePermission | HookId::FileIoctl
         | HookId::FileLock | HookId::FileReceive => {
-            // Try matchpathcon for the file path prefix
             let path = unsafe { event.object.file.path };
             let path_str = String::from_utf8_lossy(&path)
                 .trim_end_matches('\0')
@@ -221,7 +219,6 @@ fn resolve_tcontext(
                 {
                     Ok(output) => {
                         let stdout = String::from_utf8_lossy(&output.stdout);
-                        // matchpathcon output: "path\tsystem_u:object_r:type_t:s0"
                         if let Some(ctx) = stdout.split('\t').nth(1) {
                             let ctx = ctx.trim().to_string();
                             let short = crate::resolver::extract_type(&ctx);
@@ -231,25 +228,27 @@ fn resolve_tcontext(
                     Err(_) => {}
                 }
             }
-            // Fallback: unresolved
             ("unresolved".into(), "unresolved_t".into())
         }
         _ if tclass.contains("socket") => {
             let family = unsafe { event.object.sock.family };
             let port = u16::from_be(unsafe { event.object.sock.port });
-            let mut tcontext = format!("socket_{}", family);
-            if port != 0 {
-                tcontext.push_str(&format!(":{}", port));
-            }
-            (tcontext.clone(), tcontext)
+            (format!("socket_{}:{}", family, port), format!("socket_{}_t", family))
         }
-        _ => {
-            ("generic".into(), "generic_t".into())
-        }
+        _ => ("generic".into(), "generic_t".into())
     }
 }
 
-/// Emit the current batch to the LLM channel and clear it.
+fn hash_key(a: &str, b: &str, c: &str, d: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = seahash::SeaHasher::new();
+    a.hash(&mut hasher);
+    b.hash(&mut hasher);
+    c.hash(&mut hasher);
+    d.hash(&mut hasher);
+    hasher.finish()
+}
+
 async fn emit_batch(
     batch: &mut HashMap<(String, String, String, String), NormalizedAccess>,
     _seen: &mut lru::LruCache<u64, u8>,
@@ -257,11 +256,7 @@ async fn emit_batch(
 ) {
     let events: Vec<NormalizedAccess> = batch.drain().map(|(_, v)| v).collect();
     let new_count = events.iter().filter(|e| e.is_new).count();
-    tracing::info!(
-        "emitting batch: {} events ({} new)",
-        events.len(),
-        new_count,
-    );
+    tracing::info!("emitting batch: {} events ({} new)", events.len(), new_count);
     if tx.send(events).await.is_err() {
         tracing::warn!("LLM channel closed");
     }
