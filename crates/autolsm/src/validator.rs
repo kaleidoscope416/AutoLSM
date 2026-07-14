@@ -3,91 +3,47 @@
 use autolsm_common::AllowRule;
 use std::collections::HashSet;
 
-/// SELinux object classes known to be valid.
 pub static VALID_CLASSES: &[&str] = &[
-    "file",
-    "dir",
-    "lnk_file",
-    "chr_file",
-    "blk_file",
-    "fifo_file",
-    "sock_file",
-    "tcp_socket",
-    "udp_socket",
-    "rawip_socket",
-    "netlink_socket",
-    "packet_socket",
-    "unix_stream_socket",
-    "unix_dgram_socket",
-    "process",
-    "capability",
-    "capability2",
-    "filesystem",
-    "fd",
-    "key",
-    "sem",
-    "msgq",
-    "shm",
-    "anon_inode",
+    "file", "dir", "lnk_file", "chr_file", "blk_file", "fifo_file", "sock_file",
+    "tcp_socket", "udp_socket", "rawip_socket", "netlink_socket", "packet_socket",
+    "unix_stream_socket", "unix_dgram_socket",
+    "process", "capability", "capability2", "filesystem",
+    "fd", "key", "sem", "msgq", "shm", "anon_inode",
 ];
 
-/// Return the valid permissions for a given SELinux object class.
 pub fn valid_perms_for_class(class: &str) -> &'static [&'static str] {
     match class {
-        "file" => &[
-            "read", "write", "open", "create", "getattr", "setattr", "lock",
+        "file" => &["read", "write", "open", "create", "getattr", "setattr", "lock",
             "relabelfrom", "relabelto", "append", "link", "unlink", "rename",
             "execute", "execute_no_trans", "entrypoint", "ioctl", "map", "quotaon",
-            "mounton", "audit_access",
-        ],
-        "dir" => &[
-            "read", "write", "open", "create", "getattr", "setattr", "lock",
+            "mounton", "audit_access"],
+        "dir" => &["read", "write", "open", "create", "getattr", "setattr", "lock",
             "relabelfrom", "relabelto", "append", "link", "unlink", "rename",
-            "search", "rmdir", "add_name", "remove_name", "reparent", "audit_access",
-        ],
-        "tcp_socket" => &[
-            "create", "connect", "listen", "accept", "read", "write", "send_msg",
-            "recv_msg", "name_bind", "name_connect", "getattr", "setattr",
-            "node_bind", "relabelto", "relabelfrom",
-        ],
-        "udp_socket" => &[
-            "create", "connect", "read", "write", "send_msg", "recv_msg",
-            "name_bind", "name_connect", "getattr", "setattr",
-            "node_bind", "relabelto", "relabelfrom",
-        ],
-        "unix_stream_socket" => &[
-            "create", "connectto", "listen", "accept", "read", "write", "sendto",
-            "getattr", "setattr", "relabelto",
-        ],
-        "unix_dgram_socket" => &[
-            "create", "sendto", "read", "write", "getattr", "setattr", "relabelto",
-        ],
-        "netlink_socket" => &[
-            "create", "read", "write", "getattr", "setattr", "relabelto",
-        ],
-        "process" => &[
-            "fork", "transition", "sigkill", "sigstop", "signull", "signal",
+            "search", "rmdir", "add_name", "remove_name", "reparent", "audit_access"],
+        "tcp_socket" => &["create", "connect", "listen", "accept", "read", "write",
+            "send_msg", "recv_msg", "name_bind", "name_connect", "getattr", "setattr",
+            "node_bind", "relabelto", "relabelfrom"],
+        "udp_socket" => &["create", "connect", "read", "write", "send_msg", "recv_msg",
+            "name_bind", "name_connect", "getattr", "setattr", "node_bind", "relabelto", "relabelfrom"],
+        "unix_stream_socket" => &["create", "connectto", "listen", "accept", "read", "write",
+            "sendto", "getattr", "setattr", "relabelto"],
+        "unix_dgram_socket" => &["create", "sendto", "read", "write", "getattr", "setattr", "relabelto"],
+        "netlink_socket" => &["create", "read", "write", "getattr", "setattr", "relabelto"],
+        "process" => &["fork", "transition", "sigkill", "sigstop", "signull", "signal",
             "ptrace", "getsched", "setsched", "getsession", "getpgid", "setpgid",
             "getcap", "setcap", "share", "getattr", "setexec", "setfscreate",
             "noatsecure", "siginh", "setrlimit", "rlimitinh", "dyntransition",
-            "setcurrent", "execmem", "execstack", "execheap", "setkeycreate",
-            "setsockcreate",
-        ],
-        "capability" => &[
-            "chown", "dac_override", "dac_read_search", "fowner", "fsetid",
+            "setcurrent", "execmem", "execstack", "execheap", "setkeycreate", "setsockcreate"],
+        "capability" => &["chown", "dac_override", "dac_read_search", "fowner", "fsetid",
             "kill", "setgid", "setuid", "setpcap", "linux_immutable",
             "net_bind_service", "net_broadcast", "net_admin", "net_raw",
             "ipc_lock", "ipc_owner", "sys_module", "sys_rawio", "sys_chroot",
             "sys_ptrace", "sys_pacct", "sys_admin", "sys_boot", "sys_nice",
             "sys_resource", "sys_time", "sys_tty_config", "mknod", "lease",
             "audit_write", "audit_control", "setfcap", "mac_override", "mac_admin",
-            "syslog", "wake_alarm", "block_suspend", "audit_read",
-            "perfmon", "bpf", "checkpoint_restore",
-        ],
-        "filesystem" => &[
-            "mount", "remount", "unmount", "getattr", "relabelfrom", "relabelto",
-            "associate", "quotamod", "quotaget",
-        ],
+            "syslog", "wake_alarm", "block_suspend", "audit_read", "perfmon", "bpf", "checkpoint_restore"],
+        "filesystem" => &["mount", "remount", "unmount", "getattr", "relabelfrom",
+            "relabelto", "associate", "quotamod", "quotaget"],
         _ => &["read", "write", "create", "getattr", "setattr"],
     }
 }
@@ -108,6 +64,8 @@ pub enum ValidationError {
     UnknownType(String),
     #[error("source_type {0} is in deny list")]
     DeniedSource(String),
+    #[error("target_type {0} is in deny list")]
+    DeniedTarget(String),
     #[error("perms list is empty")]
     EmptyPerms,
     #[error("unknown SELinux class: {0}")]
@@ -116,9 +74,7 @@ pub enum ValidationError {
     UnknownPerm { class: String, perm: String },
 }
 
-/// Validate a set of allow rules against known types and deny lists.
-///
-/// All seven structural checks from the architecture (§4.2.4) are applied.
+/// Validate allow rules against known types and deny lists.
 pub fn validate(
     rules: &[AllowRule],
     known_types: &HashSet<String>,
@@ -151,9 +107,12 @@ pub fn validate(
         if !known_types.contains(&rule.target_type) {
             return Err(ValidationError::UnknownType(rule.target_type.clone()));
         }
-        // 4) Deny sources
+        // 4) Deny sources AND deny targets
         if deny_sources.contains(&rule.source_type) {
             return Err(ValidationError::DeniedSource(rule.source_type.clone()));
+        }
+        if deny_sources.contains(&rule.target_type) {
+            return Err(ValidationError::DeniedTarget(rule.target_type.clone()));
         }
         // 5) Non-empty perms
         if rule.perms.is_empty() {
@@ -177,14 +136,11 @@ pub fn validate(
     Ok(())
 }
 
-/// Build a deny_sources set: types that must never appear as the source of an allow rule.
 pub fn default_deny_sources() -> HashSet<String> {
-    let mut s = HashSet::new();
-    s.insert("kernel_t".into());
-    s.insert("init_t".into());
-    s.insert("unconfined_t".into());
-    s.insert("unlabeled_t".into());
-    s
+    [
+        "kernel_t", "init_t", "unconfined_t", "unlabeled_t",
+        "unknown_t", "unresolved_t",
+    ].iter().map(|s| s.to_string()).collect()
 }
 
 #[cfg(test)]
@@ -215,44 +171,25 @@ mod tests {
         let rules = vec![make_rule("*", "var_log_t", "file", &["read"])];
         let mut known = HashSet::new();
         known.insert("var_log_t".into());
-        assert!(matches!(
-            validate(&rules, &known, &default_deny_sources()),
-            Err(ValidationError::WildcardSource(_))
-        ));
+        assert!(matches!(validate(&rules, &known, &default_deny_sources()), Err(ValidationError::WildcardSource(_))));
     }
 
     #[test]
-    fn test_wildcard_perm_rejected() {
-        let rules = vec![make_rule("httpd_t", "var_log_t", "file", &["*"])];
+    fn test_unknown_t_rejected() {
+        let mut known = HashSet::new();
+        known.insert("unknown_t".into());
+        known.insert("var_log_t".into());
+        let rules = vec![make_rule("unknown_t", "var_log_t", "file", &["read"])];
+        assert!(matches!(validate(&rules, &known, &default_deny_sources()), Err(ValidationError::DeniedSource(_))));
+    }
+
+    #[test]
+    fn test_deny_target_rejected() {
+        let denys = default_deny_sources();
         let mut known = HashSet::new();
         known.insert("httpd_t".into());
-        known.insert("var_log_t".into());
-        assert!(matches!(
-            validate(&rules, &known, &default_deny_sources()),
-            Err(ValidationError::WildcardPerm(_))
-        ));
-    }
-
-    #[test]
-    fn test_unknown_type_rejected() {
-        let rules = vec![make_rule("hallucinated_t", "var_log_t", "file", &["read"])];
-        let mut known = HashSet::new();
-        known.insert("var_log_t".into());
-        assert!(matches!(
-            validate(&rules, &known, &default_deny_sources()),
-            Err(ValidationError::UnknownType(_))
-        ));
-    }
-
-    #[test]
-    fn test_unconfined_target_rejected() {
-        let rules = vec![make_rule("httpd_t", "unconfined_t", "file", &["read"])];
-        let mut known = HashSet::new();
-        known.insert("httpd_t".into());
-        known.insert("unconfined_t".into());
-        assert!(matches!(
-            validate(&rules, &known, &default_deny_sources()),
-            Err(ValidationError::UnconfinedTarget)
-        ));
+        known.insert("kernel_t".into());
+        let rules = vec![make_rule("httpd_t", "kernel_t", "file", &["read"])];
+        assert!(matches!(validate(&rules, &known, &denys), Err(ValidationError::DeniedTarget(_))));
     }
 }

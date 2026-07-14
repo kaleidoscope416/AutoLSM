@@ -213,7 +213,7 @@ fn resolve_tcontext(
                 .trim_end_matches('\0')
                 .to_string();
             if !path_str.is_empty() {
-                match std::process::Command::new("matchpathcon")
+                match std::process::Command::new("/usr/sbin/matchpathcon")
                     .arg(&path_str)
                     .output()
                 {
