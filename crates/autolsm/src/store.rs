@@ -73,8 +73,8 @@ impl PolicyStore {
     }
 
     /// List all versions for introspection.
-    pub fn versions(&self) -> Vec<&str> {
-        self.activations.iter().map(|a| a.version.as_str()).collect()
+    pub fn versions(&self) -> Vec<String> {
+        self.activations.iter().map(|a| a.version.clone()).collect()
     }
 }
 
