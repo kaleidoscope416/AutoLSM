@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # AutoLSM 汇报演示脚本 — 支持 LLM 语义分析
 # 使用: bash demo.sh
-# LLM 模式: bash demo.sh openai
-# 全程约 60 秒，展示完整的 采集→归一化→LLM分析→策略生成→校验→下发 闭环
+# 全程展示完整的 采集→归一化→LLM分析→策略生成→校验→下发→漂移检测 闭环
+# Loop A: Discovery (eBPF 采集 → 策略生成)
+# Loop B: Drift    (AVC 拒绝 → Δpolicy)
 
 set -euo pipefail
 
@@ -28,9 +29,11 @@ mkdir -p /tmp/autolsm
 
 # 构建 LLM 参数
 LLM_FLAGS=""
+DEMO_FLAG="--demo-mode"
 USE_LLM=false
 if [ -n "$LLM_KEY" ] && [ -n "$LLM_ENDPOINT" ]; then
     USE_LLM=true
+    DEMO_FLAG=""
     LLM_FLAGS="--llm-endpoint $LLM_ENDPOINT --llm-model $LLM_MODEL --llm-key $LLM_KEY"
 fi
 
@@ -75,7 +78,7 @@ RUSTC_BOOTSTRAP=1 cargo run --bin autolsm -- \
     --target-cgroups $MY_CGID \
     --batch-window-s 2 \
     --tmp-dir /tmp/autolsm \
-    --log-level info \
+    $DEMO_FLAG \
     $LLM_FLAGS \
     2>&1 | tee /tmp/autolsm-demo.log &
 DAEMON_PID=$!
@@ -156,19 +159,80 @@ else
     warn "策略未安装: 检查 semodule 权限和 SELinux 类型名"
 fi
 
+
+# ════════════════════════════════════════════════════════════════════════
+stage "Stage 6: 触发行为漂移 → 注入 AVC 拒绝记录"
+# ════════════════════════════════════════════════════════════════════════
+
+info "向 audit.log 注入 2 条模拟 AVC 拒绝记录 (模拟新 workload 触发拒绝)..."
+# Inject fake AVC denials into audit.log for drift detection
+AUDIT_LOG="/var/log/audit/audit.log"
+if [ -w "$AUDIT_LOG" ]; then
+    NOW=$(date +%s)
+    cat >> "$AUDIT_LOG" << AVC_EOF
+type=AVC msg=audit(${NOW}.001:10001): avc:  denied  { read open } for  pid=9999 comm="new_workload" name="data.db" dev="vda1" ino=99999 scontext=unconfined_u:unconfined_r:unconfined_t:s0 tcontext=system_u:object_r:var_t:s0 tclass=file permissive=1
+type=AVC msg=audit(${NOW}.002:10002): avc:  denied  { write } for  pid=9999 comm="new_workload" name="data.db" dev="vda1" ino=99999 scontext=unconfined_u:unconfined_r:unconfined_t:s0 tcontext=system_u:object_r:var_t:s0 tclass=file permissive=1
+AVC_EOF
+    info "已注入 2 条 AVC 拒绝: scontext=unconfined_t → tcontext=var_t : file { read open write }"
+    info "等待 AuditConsumer 检测 (2s 轮询)..."
+else
+    warn "audit.log 不可写 — 跳过漂移检测 (可能需要 root)"
+fi
+
+read -p "  按 Enter 观察漂移检测..."
+
+sleep 6  # Give AuditConsumer + Normalizer + LLM time to process
+
+# ════════════════════════════════════════════════════════════════════════
+stage "Stage 7: 漂移检测结果 — Loop B: Drift"
+# ════════════════════════════════════════════════════════════════════════
+
+echo ""
+info "=== 漂移检测 — AuditConsumer 读取 AVC 拒绝 ==="
+grep "audit consumer\|AVC\|denial\|PreFilter\|drift" /tmp/autolsm-demo.log | while read line; do
+    echo -e "    ${YELLOW}🔍${NC} $line"
+done
+
+echo ""
+info "=== 漂移批处理 — Normalizer 合并拒绝 + 观测 ==="
+grep "\[DRIFT\]" /tmp/autolsm-demo.log | while read line; do
+    echo -e "    ${YELLOW}🔄${NC} $line"
+done
+
+echo ""
+info "=== LLM 策略精炼 (RefinePolicy) ==="
+if $USE_LLM; then
+    echo -e "    ${CYAN}  - 任务类型: RefinePolicy (增量策略), 非 GenerateMinimalPolicy${NC}"
+    echo -e "    ${CYAN}  - LLM 输入: 当前规则 + 新拒绝 + 观测事件${NC}"
+    echo -e "    ${CYAN}  - LLM 输出: Δ规则 (增量 allow 规则) + 告警${NC}"
+fi
+grep "refine\|Refine\|DRIFT DETECTED" /tmp/autolsm-demo.log | while read line; do
+    echo -e "    ${GREEN}🧠${NC} $line"
+done
+
+echo ""
+info "=== 漂移驱动的策略增量 (Δpolicy) ==="
+grep "policy installed\|semodule -i\|rolling back" /tmp/autolsm-demo.log | tail -3 | while read line; do
+    if echo "$line" | grep -q "installed"; then
+        echo -e "    ${GREEN}✓${NC} $line"
+    else
+        echo -e "    ${YELLOW}${line}${NC}"
+    fi
+done
 # ════════════════════════════════════════════════════════════════════════
 stage "演示完成 — 数据流回顾"
 # ════════════════════════════════════════════════════════════════════════
 
 echo ""
+if $USE_LLM; then
+echo -e "  ${BOLD}Loop A (Discovery):${NC}"
 echo -e "  ${BOLD}eBPF hooks${NC} ──→ ${BOLD}RingBuf${NC} ──→ ${BOLD}Collector${NC} ──→ ${BOLD}Normalizer${NC} ──→ ${BOLD}LLM${NC} ──→ ${BOLD}Validator${NC} ──→ ${BOLD}semodule${NC}"
 echo "   (内核)       (共享内存)   (用户态)     (去重批处理)   (语义分析)  (安全检查)    (策略安装)"
 echo ""
-
-if $USE_LLM; then
-    echo -e "  ${GREEN}本次使用 LLM:${NC} $LLM_MODEL @ $LLM_ENDPOINT"
-    echo -e "  LLM 的增量价值: 区分 '正常业务需要' vs '可疑攻击行为'"
-    echo -e "  → audit2allow 会无差别放行所有拒绝, LLM 能做语义判断"
+echo -e "  ${BOLD}Loop B (Drift):${NC}"
+echo -e "  ${BOLD}AVC denied${NC} ──→ ${BOLD}AuditConsumer${NC} ──→ ${BOLD}PreFilter${NC} ──→ ${BOLD}Normalizer${NC} ──→ ${BOLD}LLM refine${NC} ──→ ${BOLD}Δpolicy${NC}"
+echo "   (audit.log)    (增量读取)      (降噪/限速)   ([DRIFT] 标记)  (增量规则)     (semodule -i)"
+echo ""
 else
     echo -e "  ${YELLOW}本次使用确定性策略生成器 (未配置 LLM API)${NC}"
     echo -e "  要切换 LLM: 在脚本顶部填写 LLM_ENDPOINT / LLM_MODEL / LLM_KEY"

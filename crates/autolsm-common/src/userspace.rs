@@ -49,6 +49,17 @@ pub enum NormalizerInput {
     Denial(AvcDenial),
 }
 
+// ── Normalized Batch ────────────────────────────────────────────────────────
+
+/// A time-window batch emitted by the Normalizer to the LLM loop.
+#[derive(Clone, Debug)]
+pub struct NormalizedBatch {
+    /// Deduplicated access patterns observed or denied in this window
+    pub events: Vec<NormalizedAccess>,
+    /// True if any denials were detected in this window (triggers Loop B: Drift)
+    pub has_denials: bool,
+}
+
 // ── AVC Denial Record ──────────────────────────────────────────────────────
 
 /// A parsed SELinux Access Vector Cache denial from audit.log.

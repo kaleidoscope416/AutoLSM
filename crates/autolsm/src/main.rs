@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
     // ── Initialize components ───────────────────────────────────────────
 
     let (normalizer_tx, normalizer_rx) = mpsc::channel::<autolsm_common::NormalizerInput>(4096);
-    let (llm_tx, llm_rx) = mpsc::channel::<Vec<autolsm_common::NormalizedAccess>>(64);
+    let (llm_tx, llm_rx) = mpsc::channel::<autolsm_common::NormalizedBatch>(64);
 
     // LLM backend: demo-mode forces SimplePolicyGenerator regardless of --llm-key
     let policy_gen: Arc<dyn llm::PolicyGenerator> = if cli.demo_mode || cli.llm_key.is_none() {

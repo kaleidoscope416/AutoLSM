@@ -59,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     let (normalizer_tx, normalizer_rx) =
         mpsc::channel::<NormalizerInput>(4096);
     let (llm_tx, llm_rx) =
-        mpsc::channel::<Vec<autolsm_common::NormalizedAccess>>(64);
+        mpsc::channel::<autolsm_common::NormalizedBatch>(64);
 
     // No-op LLM generator (no external API needed)
     let policy_gen: Arc<dyn PolicyGenerator> = Arc::new(llm::NoOpGenerator);

@@ -1,5 +1,5 @@
 use autolsm_common::{
-    HookId, NormalizedAccess, NormalizerInput, ObservationEvent,
+    HookId, NormalizedAccess, NormalizedBatch, NormalizerInput, ObservationEvent,
     af, proto,
 };
 use std::collections::HashMap;
@@ -14,12 +14,13 @@ const SEEN_MAX: usize = 10000;
 
 pub async fn run(
     mut rx: mpsc::Receiver<NormalizerInput>,
-    tx: mpsc::Sender<Vec<NormalizedAccess>>,
+    tx: mpsc::Sender<NormalizedBatch>,
     resolver: Arc<Mutex<Resolver>>,
     window_s: u64,
 ) -> anyhow::Result<()> {
     let mut tick = interval(Duration::from_secs(window_s));
     let mut batch: HashMap<(String, String, String, String), NormalizedAccess> = HashMap::new();
+    let mut has_denials = false;
     let mut seen: lru::LruCache<u64, u8> = lru::LruCache::new(
         std::num::NonZeroUsize::new(SEEN_MAX).unwrap(),
     );
@@ -39,6 +40,7 @@ pub async fn run(
                         ).await;
                     }
                     NormalizerInput::Denial(denial) => {
+                        has_denials = true;
                         for perm in &denial.perms {
                             let key = (
                                 denial.scontext_type.clone(),
@@ -64,12 +66,12 @@ pub async fn run(
                     }
                 }
                 if batch.len() >= BATCH_MAX {
-                    emit_batch(&mut batch, &mut seen, &tx).await;
+                    emit_batch(&mut batch, &mut seen, &tx, &mut has_denials).await;
                 }
             }
             _ = tick.tick() => {
                 if !batch.is_empty() {
-                    emit_batch(&mut batch, &mut seen, &tx).await;
+                    emit_batch(&mut batch, &mut seen, &tx, &mut has_denials).await;
                 }
             }
             else => {
@@ -248,16 +250,19 @@ fn hash_key(a: &str, b: &str, c: &str, d: &str) -> u64 {
     d.hash(&mut hasher);
     hasher.finish()
 }
-
 async fn emit_batch(
     batch: &mut HashMap<(String, String, String, String), NormalizedAccess>,
     _seen: &mut lru::LruCache<u64, u8>,
-    tx: &mpsc::Sender<Vec<NormalizedAccess>>,
+    tx: &mpsc::Sender<NormalizedBatch>,
+    has_denials: &mut bool,
 ) {
     let events: Vec<NormalizedAccess> = batch.drain().map(|(_, v)| v).collect();
     let new_count = events.iter().filter(|e| e.is_new).count();
-    tracing::info!("emitting batch: {} events ({} new)", events.len(), new_count);
-    if tx.send(events).await.is_err() {
+    tracing::info!("emitting batch: {} events ({} new){}",
+        events.len(), new_count,
+        if *has_denials { " [DRIFT]" } else { "" });
+    if tx.send(NormalizedBatch { events, has_denials: *has_denials }).await.is_err() {
         tracing::warn!("LLM channel closed");
     }
+    *has_denials = false;
 }

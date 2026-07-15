@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use autolsm_common::{LlmRequest, LlmResponse, LlmTask, NormalizedAccess};
+use autolsm_common::{LlmRequest, LlmResponse, LlmTask, NormalizedAccess, NormalizedBatch};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
@@ -183,7 +183,7 @@ pub enum LlmError {
 /// 3. Validates response
 /// 4. Installs approved rules via PolicyLoader
 pub async fn run(
-    mut rx: mpsc::Receiver<Vec<NormalizedAccess>>,
+    mut rx: mpsc::Receiver<NormalizedBatch>,
     generator: Arc<dyn PolicyGenerator>,
     policy_loader: Arc<Mutex<PolicyLoader>>,
     _model: String,
@@ -191,48 +191,62 @@ pub async fn run(
     tracing::info!("LLM loop started");
 
     let deny_sources = default_deny_sources();
+    // Track previously installed rules for refinement
+    let mut current_rules: Vec<autolsm_common::AllowRule> = Vec::new();
 
     while let Some(batch) = rx.recv().await {
-        tracing::info!("LLM loop: received batch of {} events", batch.len());
+        let NormalizedBatch { events, has_denials } = batch;
+        tracing::info!("LLM loop: received batch of {} events{}",
+            events.len(),
+            if has_denials { " [DRIFT DETECTED]" } else { "" });
 
-        if batch.is_empty() {
+        if events.is_empty() {
             continue;
         }
 
         // Build the request
-        let scontext_types: Vec<&str> = batch
+        let scontext_types: Vec<&str> = events
             .iter()
             .map(|e| e.scontext_type.as_str())
             .collect();
         let main_domain = scontext_types.first().copied().unwrap_or("unknown_t");
 
+        let task = if has_denials {
+            LlmTask::RefinePolicy
+        } else {
+            LlmTask::GenerateMinimalPolicy
+        };
+
         let request = LlmRequest {
-            task: LlmTask::GenerateMinimalPolicy,
+            task,
             context: autolsm_common::LlmContext {
                 workload_domain: main_domain.to_string(),
                 workload_type: None,
                 observed_window_s: 60,
             },
-            normalized_events: batch.clone(),
+            normalized_events: events.clone(),
             drift_denials: vec![],
-            current_rules: vec![],
+            current_rules: current_rules.clone(),
         };
 
-        // Call the LLM
-        let response = match generator.generate(&request).await {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::error!("LLM generate failed: {}", e);
-                continue;
+        // Call the LLM — refine for drift, generate for discovery
+        let response = if has_denials {
+            match generator.refine(&request).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("LLM refine failed: {}", e);
+                    continue;
+                }
+            }
+        } else {
+            match generator.generate(&request).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::error!("LLM generate failed: {}", e);
+                    continue;
+                }
             }
         };
-
-        tracing::info!(
-            "LLM response: {} allow rules, {} alerts, confidence={:.2}",
-            response.allow_rules.len(),
-            response.alerts.len(),
-            response.confidence,
-        );
 
         // Check confidence threshold
         if response.confidence < 0.7 {
@@ -253,10 +267,9 @@ pub async fn run(
             }
             continue;
         }
-
-        // Build known_types from the batch
+        // Build known_types from the events
         let mut known_types = std::collections::HashSet::new();
-        for event in &batch {
+        for event in &events {
             known_types.insert(event.scontext_type.clone());
             known_types.insert(event.tcontext_type.clone());
         }
@@ -278,6 +291,21 @@ pub async fn run(
             match loader.install(&response.allow_rules).await {
                 Ok(version) => {
                     tracing::info!("policy installed: {}", version);
+                    // Track for future drift refinement
+                    if has_denials {
+                        // Delta: merge new rules into current
+                        let mut merged = current_rules.clone();
+                        for rule in &response.allow_rules {
+                            if !merged.iter().any(|r| r.source_type == rule.source_type
+                                && r.target_type == rule.target_type
+                                && r.tclass == rule.tclass) {
+                                merged.push(rule.clone());
+                            }
+                        }
+                        current_rules = merged;
+                    } else {
+                        current_rules = response.allow_rules.clone();
+                    }
                 }
                 Err(e) => {
                     tracing::error!("policy install failed: {} — rolling back", e);
