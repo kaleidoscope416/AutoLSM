@@ -9,7 +9,7 @@
 // This file is the binary entry point.
 
 // Import library modules
-use autolsm::{audit, collector, llm, normalizer, resolver, selinux, state_machine, store, validator};
+use autolsm::{audit, collector, llm, normalizer, resolver, selinux, simple_gen, state_machine, store, validator};
 
 use anyhow::Context;
 use clap::Parser;
@@ -77,7 +77,7 @@ async fn main() -> anyhow::Result<()> {
     let policy_gen: Arc<dyn llm::PolicyGenerator> = if let Some(key) = cli.llm_key.clone() {
         Arc::new(llm::OpenAiPolicyGenerator::new(&cli.llm_endpoint, &cli.llm_model, &key))
     } else {
-        Arc::new(llm::NoOpGenerator)
+        Arc::new(simple_gen::SimplePolicyGenerator)
     };
 
     // Policy store (versioned, with rollback)
