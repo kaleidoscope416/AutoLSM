@@ -22,7 +22,7 @@ pub async fn run(
         .unwrap_or_else(|_| "crates/autolsm-ebpf/autolsm.bpf.o".to_string());
     let mut bpf = if std::path::Path::new(&elf_path).exists() {
         EbpfLoader::new()
-            .map_max_entries("TARGET_CGROUPS", 256)
+            .map_max_entries("target_cgroups", 256)
             .load_file(&elf_path)?
     } else {
         tracing::warn!("eBPF ELF not found at {} — collector running in no-op mode", elf_path);
@@ -33,24 +33,24 @@ pub async fn run(
     };
 
     let btf = Btf::from_sys_fs().context("failed to load BTF from /sys/kernel/btf/vmlinux")?;
-    let hook_names = &[
-        "file_open_obs",
-        "file_permission_obs",
-        "socket_bind_obs",
-        "socket_connect_obs",
-        "task_setrlimit_obs",
+    let hook_names: &[(&str, &str)] = &[
+        ("file_open_obs", "file_open"),
+        ("file_permission_obs", "file_permission"),
+        ("socket_bind_obs", "socket_bind"),
+        ("socket_connect_obs", "socket_connect"),
+        ("task_setrlimit_obs", "task_setrlimit"),
     ];
 
-    for name in hook_names {
-        match bpf.program_mut(*name) {
+    for (prog_name, hook_name) in hook_names {
+        match bpf.program_mut(*prog_name) {
             Some(prog) => {
                 let lsm: &mut Lsm = prog.try_into().context("program is not an Lsm type")?;
-                lsm.load(name, &btf)?;
+                lsm.load(hook_name, &btf)?;
                 lsm.attach()?;
-                tracing::info!("attached LSM hook: {}", name);
+                tracing::info!("attached LSM hook: {}", hook_name);
             }
             None => {
-                tracing::warn!("LSM program not found in ELF: {}", name);
+                tracing::warn!("LSM program not found in ELF: {}", prog_name);
             }
         }
     }
@@ -58,7 +58,7 @@ pub async fn run(
     // Populate TARGET_CGROUPS map
     if !target_cgroups.is_empty() {
         let mut cgroup_map: AyaHashMap<&mut MapData, u64, u8> =
-            AyaHashMap::try_from(bpf.map_mut("TARGET_CGROUPS").unwrap())?;
+            AyaHashMap::try_from(bpf.map_mut("target_cgroups").unwrap())?;
         for cgid in &target_cgroups {
             cgroup_map.insert(*cgid, 1, 0)?;
             tracing::info!("added target cgroup: {}", cgid);
@@ -67,7 +67,7 @@ pub async fn run(
 
     // Initialize RingBuf polling
     let ringbuf: RingBuf<&mut MapData> =
-        RingBuf::try_from(bpf.map_mut("EVENTS").unwrap())?;
+        RingBuf::try_from(bpf.map_mut("events").unwrap())?;
     let mut async_fd = AsyncFd::with_interest(ringbuf, tokio::io::Interest::READABLE)?;
 
     tracing::info!(

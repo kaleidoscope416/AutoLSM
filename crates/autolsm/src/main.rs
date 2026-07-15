@@ -35,6 +35,9 @@ struct Cli {
     /// LLM API key (or set AUTOLSM_LLM_KEY env var)
     #[arg(long, env = "AUTOLSM_LLM_KEY")]
     llm_key: Option<String>,
+    /// Demo mode: use SimplePolicyGenerator instead of LLM (safe for testing / demos)
+    #[arg(long, default_value_t = false)]
+    demo_mode: bool,
 
     /// Normalizer batch window in seconds
     #[arg(long, default_value = "60")]
@@ -73,11 +76,12 @@ async fn main() -> anyhow::Result<()> {
     let (normalizer_tx, normalizer_rx) = mpsc::channel::<autolsm_common::NormalizerInput>(4096);
     let (llm_tx, llm_rx) = mpsc::channel::<Vec<autolsm_common::NormalizedAccess>>(64);
 
-    // LLM backend
-    let policy_gen: Arc<dyn llm::PolicyGenerator> = if let Some(key) = cli.llm_key.clone() {
-        Arc::new(llm::OpenAiPolicyGenerator::new(&cli.llm_endpoint, &cli.llm_model, &key))
-    } else {
+    // LLM backend: demo-mode forces SimplePolicyGenerator regardless of --llm-key
+    let policy_gen: Arc<dyn llm::PolicyGenerator> = if cli.demo_mode || cli.llm_key.is_none() {
         Arc::new(simple_gen::SimplePolicyGenerator)
+    } else {
+        let key = cli.llm_key.as_ref().unwrap();
+        Arc::new(llm::OpenAiPolicyGenerator::new(&cli.llm_endpoint, &cli.llm_model, key))
     };
 
     // Policy store (versioned, with rollback)
