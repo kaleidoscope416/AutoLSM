@@ -98,19 +98,19 @@ static __always_inline void emit(struct observation_event *e) {
 // ── File Open ───────────────────────────────────────────────────────────────
 
 SEC("lsm/file_open")
-int BPF_PROG(file_open_obs, struct file *file, int flags, int ret)
+int BPF_PROG(file_open_obs, struct file *file)
 {
-    if (!is_target() || ret != 0)
-        return ret;
+    if (!is_target())
+        return 0;
 
     struct observation_event e = {};
     fill_base(&e, HOOK_FILE_OPEN);
 
     struct inode *ino;
     bpf_core_read(&ino, sizeof(ino), &file->f_inode);
-    e.object.file.dev = (__u64)(unsigned long)ino; // placeholder
+    e.object.file.dev = (__u64)(unsigned long)ino;
     e.object.file.inode = BPF_CORE_READ(ino, i_ino);
-    e.object.file.flags = flags;
+    e.object.file.flags = BPF_CORE_READ(file, f_flags);
 
     // Copy dentry name prefix
     struct dentry *d;
@@ -123,16 +123,16 @@ int BPF_PROG(file_open_obs, struct file *file, int flags, int ret)
     bpf_probe_read_kernel_str(e.object.file.path, len + 1, name);
 
     emit(&e);
-    return ret;
+    return 0;
 }
 
 // ── File Permission ─────────────────────────────────────────────────────────
 
 SEC("lsm/file_permission")
-int BPF_PROG(file_permission_obs, struct file *file, int mask, int ret)
+int BPF_PROG(file_permission_obs, struct file *file, int mask)
 {
-    if (!is_target() || ret != 0)
-        return ret;
+    if (!is_target())
+        return 0;
 
     struct observation_event e = {};
     fill_base(&e, HOOK_FILE_PERMISSION);
@@ -153,17 +153,17 @@ int BPF_PROG(file_permission_obs, struct file *file, int mask, int ret)
     bpf_probe_read_kernel_str(e.object.file.path, len + 1, name);
 
     emit(&e);
-    return ret;
+    return 0;
 }
 
 // ── Socket Bind ─────────────────────────────────────────────────────────────
 
 SEC("lsm/socket_bind")
 int BPF_PROG(socket_bind_obs, struct socket *sock, struct sockaddr *address,
-             int addrlen, int ret)
+             int addrlen)
 {
-    if (!is_target() || ret != 0)
-        return ret;
+    if (!is_target())
+        return 0;
 
     struct observation_event e = {};
     fill_base(&e, HOOK_SOCKET_BIND);
@@ -178,17 +178,17 @@ int BPF_PROG(socket_bind_obs, struct socket *sock, struct sockaddr *address,
     }
 
     emit(&e);
-    return ret;
+    return 0;
 }
 
 // ── Socket Connect ──────────────────────────────────────────────────────────
 
 SEC("lsm/socket_connect")
 int BPF_PROG(socket_connect_obs, struct socket *sock, struct sockaddr *address,
-             int addrlen, int ret)
+             int addrlen)
 {
-    if (!is_target() || ret != 0)
-        return ret;
+    if (!is_target())
+        return 0;
 
     struct observation_event e = {};
     fill_base(&e, HOOK_SOCKET_CONNECT);
@@ -203,20 +203,20 @@ int BPF_PROG(socket_connect_obs, struct socket *sock, struct sockaddr *address,
     }
 
     emit(&e);
-    return ret;
+    return 0;
 }
 
 // ── Task Setrlimit ──────────────────────────────────────────────────────────
 
 SEC("lsm/task_setrlimit")
 int BPF_PROG(task_setrlimit_obs, struct task_struct *task,
-             unsigned int resource, struct rlimit *new_rlim, int ret)
+             unsigned int resource, struct rlimit *new_rlim)
 {
-    if (!is_target() || ret != 0)
-        return ret;
+    if (!is_target())
+        return 0;
 
     struct observation_event e = {};
     fill_base(&e, HOOK_TASK_SETRLIMIT);
     emit(&e);
-    return ret;
+    return 0;
 }
