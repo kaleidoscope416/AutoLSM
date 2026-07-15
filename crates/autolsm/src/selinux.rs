@@ -17,7 +17,7 @@ impl PolicyLoader {
         Self { tmp_dir: tmp_dir.to_string(), store }
     }
 
-    /// Install a set of allow rules as a CIL policy module via stdin pipe (no TOCTOU).
+    /// Install a set of allow rules as a CIL policy module.
     pub async fn install(&mut self, rules: &[AllowRule]) -> Result<String, PolicyError> {
         if rules.is_empty() {
             return Err(PolicyError::EmptyRules);
@@ -31,26 +31,21 @@ impl PolicyLoader {
             module_name, rules.len(), cil.len(),
         );
 
-        // Pipe CIL to semodule -i - via stdin to avoid /tmp TOCTOU race
-        use tokio::io::AsyncWriteExt;
-        let mut child = Command::new("semodule")
-            .arg("-i")
-            .arg("-")
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
+        // Write CIL to temp file (semodule on some systems doesn't support stdin)
+        let cil_path = format!("{}/{}.cil", self.tmp_dir, module_name);
+        tokio::fs::write(&cil_path, &cil).await
             .map_err(|e| PolicyError::Io(e.to_string()))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(cil.as_bytes()).await
-                .map_err(|e| PolicyError::Io(e.to_string()))?;
-        }
 
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            child.wait_with_output(),
+            Command::new("semodule")
+                .arg("-i")
+                .arg(&cil_path)
+                .output(),
         ).await;
+
+        // Clean up temp file
+        let _ = tokio::fs::remove_file(&cil_path).await;
 
         match output {
             Ok(Ok(out)) => {
@@ -105,11 +100,17 @@ impl PolicyLoader {
         for ((src, tgt, class), mut perms) in grouped {
             perms.sort();
             perms.dedup();
-            cil.push_str(&format!("(allow {} {} ({} {}))\n", src, tgt, class, perms.join(" ")));
+            // CIL format: (allow src tgt (class (perm1 perm2 ...)))
+            let perm_list: Vec<String> = perms.iter().map(|p| format!("({})", p)).collect();
+            cil.push_str(&format!(
+                "(allow {} {} ({} ({})))\n",
+                src, tgt, class, perm_list.join(" ")
+            ));
         }
         cil
     }
 }
+
 
 #[derive(Debug, thiserror::Error)]
 pub enum PolicyError {
@@ -139,6 +140,6 @@ mod tests {
         ];
         let cil = PolicyLoader::to_cil(&rules);
         assert_eq!(cil.matches("(allow").count(), 1);
-        assert!(cil.contains("append read") || cil.contains("read append"));
+        assert!(cil.contains("(read)") && cil.contains("(append)"));
     }
 }

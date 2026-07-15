@@ -115,13 +115,32 @@ Key rules:
 
 5. Group related permissions for the same (source_type, target_type, tclass) into one rule.
 
-6. Default severities for alerts:
-   - low: noise / cosmetic
-   - medium: potential misconfiguration
-   - high: likely security concern
-   - critical: definite attack indicator
+6. Alert severities: "low", "medium", "high", or "critical".
 
-Output valid JSON matching the schema.
+Output EXACTLY this JSON schema, no extra text outside the JSON object:
+{
+  "allow_rules": [
+    {
+      "source_type": "<string>",
+      "target_type": "<string>",
+      "tclass": "<string>",
+      "perms": ["<string>"],
+      "rationale": "<string>"
+    }
+  ],
+  "alerts": [
+    {
+      "severity": "<low|medium|high|critical>",
+      "scontext_type": "<string>",
+      "tcontext_type": "<string>",
+      "tclass": "<string>",
+      "perm": "<string>",
+      "reason": "<string>"
+    }
+  ],
+  "confidence": 0.0,
+  "summary": "<optional string>"
+}
 "#      }
 }
 

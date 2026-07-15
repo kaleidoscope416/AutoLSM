@@ -138,7 +138,7 @@ pub fn validate(
 
 pub fn default_deny_sources() -> HashSet<String> {
     [
-        "kernel_t", "init_t", "unconfined_t", "unlabeled_t",
+        "kernel_t", "init_t", "unlabeled_t",
         "unknown_t", "unresolved_t",
     ].iter().map(|s| s.to_string()).collect()
 }
