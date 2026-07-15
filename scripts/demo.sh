@@ -75,7 +75,6 @@ RUSTC_BOOTSTRAP=1 cargo run --bin autolsm -- \
     --target-cgroups $MY_CGID \
     --batch-window-s 2 \
     --tmp-dir /tmp/autolsm \
-    --demo-mode \
     --log-level info \
     $LLM_FLAGS \
     2>&1 | tee /tmp/autolsm-demo.log &
