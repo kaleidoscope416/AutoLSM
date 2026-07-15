@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # AutoLSM End-to-End Test — eBPF LSM observer capture
 #
-# Usage: sudo bash scripts/e2e-test.sh
+# Usage: bash scripts/e2e-test.sh
 
 set -euo pipefail
 
@@ -26,7 +26,8 @@ echo "============================================"
 # ── Step 1: Build ──────────────────────────────────────────────────────
 
 echo ""; echo "--- Step 1: Build ---"
-cargo build --bin autolsm 2>/dev/null && pass "cargo build" || { fail "build"; exit 1; }
+export RUSTC_BOOTSTRAP=1
+cargo build --bin autolsm 2>&1 | tail -3 && pass "cargo build" || { fail "build"; echo "Run: RUSTC_BOOTSTRAP=1 cargo build --bin autolsm"; exit 1; }
 
 # ── Step 2: Compile C eBPF (skip if clang missing) ─────────────────────
 
@@ -49,12 +50,9 @@ CGROUP_ID=$(stat -c %i /sys/fs/cgroup 2>/dev/null || echo "0")
 # ── Step 4: Start daemon ───────────────────────────────────────────────
 
 echo ""; echo "--- Step 4: Start daemon ---"
-RUST_LOG=info AUTOLSM_EBPF_PATH="crates/autolsm-ebpf/autolsm.bpf.o" \
-    ./target/debug/autolsm \
-    --target-cgroups "$CGROUP_ID" \
-    --batch-window-s 3 \
-    --log-level info \
-    > "$DAEMON_LOG" 2>&1 &
+BIN=$(ls ./target/debug/autolsm ./target/release/autolsm 2>/dev/null | head -1)
+[ -z "$BIN" ] && { fail "autolsm binary not found (build first)"; exit 1; }
+RUST_LOG=info AUTOLSM_EBPF_PATH="crates/autolsm-ebpf/autolsm.bpf.o" $BIN --target-cgroups "$CGROUP_ID" --batch-window-s 3 --log-level info > "$DAEMON_LOG" 2>&1 &
 DAEMON_PID=$!
 sleep 2
 kill -0 "$DAEMON_PID" 2>/dev/null && pass "daemon pid=$DAEMON_PID" || { fail "daemon crash"; cat "$DAEMON_LOG"; exit 1; }
