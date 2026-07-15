@@ -13,3 +13,4 @@ remote-task.md
 task.md
 __pycache__/
 *.pyc
+vmlinux.h
