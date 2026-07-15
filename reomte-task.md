@@ -20,21 +20,22 @@
 1. 同步代码至远程服务器，完成首次编译
 2. 通过前置条件脚本 (scripts/check-prereqs.sh) 确认环境就绪
 3. 运行全部 35 个集成测试 + 单元测试，确认核心逻辑无回归
-4. 启动 autolsm 守护进程（no-op 模式），验证进程存活与各 tokio task 正常调度
-5. **运行 `cargo run --bin pipeline-test`，验证完整数据链路**：
-   - 合成事件注入 → Normalizer 去重/窗口批处理 → LLM 循环调用 generate() → Validator 结构校验 → PolicyLoader 安装尝试
-   - 日志必须包含 "Normalizer → LLM → Validator → PolicyLoader path exercised" + "Pipeline Verification PASSED"
-6. （条件满足时）编译 eBPF 程序、attach LSM hooks、通过 RingBuf 接收观测事件
-7. （条件满足时）解析本地 audit.log 中的 AVC denied 记录，验证 PreFilter 与 Normalizer 管道
+4. **运行 `cargo run --bin pipeline-test`，验证完整数据链路**（合成事件 → Normalizer → LLM → Validator → PolicyLoader）
+5. **运行 `sudo bash scripts/e2e-test.sh`，验证 eBPF 行为采集全流程**：
+   - xtask 编译 C eBPF 程序（clang + bpftool BTF）
+   - 启动 autolsm 守护进程，attach LSM hooks
+   - 在目标 cgroup 中执行 `cat /etc/hostname`、`ls /tmp` 等测试命令
+   - 检查 RingBuf 事件捕获、Normalizer 批处理、LLM 循环
+6. 解析本地 audit.log 中的 AVC denied 记录，验证 PreFilter + Normalizer 管道
 
 # 验收标准
 1. `cargo check` 零 error 通过
 2. `cargo test` 全部测试通过（≥35 个集成测试 + 全部单元测试）
 3. `bash scripts/check-prereqs.sh` 无 FAIL 项（WARN 可接受：bpfel 目标/bpf 文件系统为可选特性）
 4. `cargo run --bin pipeline-test` 输出含 "Pipeline Verification PASSED"，无 timeout/panic/死锁
-5. `cargo run -- --target-cgroups 0 --llm-endpoint http://localhost:11434/v1` 启动成功，日志输出正常（Ctrl+C 可终止）
-6. 日志输出包含 "collector running" / "normalizer started" / "LLM loop started" 等关键阶段标记
-7. （eBPF 可用时）`cat /sys/kernel/security/lsm | grep bpf` 确认 BPF LSM 已启用
+5. `sudo bash scripts/e2e-test.sh` PASS ≥ 6 项（eBPF ELF 不可用时自动降级为 skip），无 daemon crash
+6. `cargo run -- --target-cgroups 0 --llm-endpoint http://localhost:11434/v1` 启动成功，Ctrl+C 可终止
+7. 日志输出包含 "collector running" / "normalizer started" / "LLM loop started" / "emitting batch" 关键阶段
 8. 全部步骤耗时在 15 分钟内（不含首次 Rust 编译缓存预热）
 ---
 

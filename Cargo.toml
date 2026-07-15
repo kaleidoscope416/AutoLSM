@@ -8,7 +8,7 @@ members = [
 
 # autolsm-ebpf is NOT a workspace member — it's built separately
 # by xtask for the bpfel-unknown-none target with -Zbuild-std=core
-
+exclude = ["crates/autolsm-ebpf"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"

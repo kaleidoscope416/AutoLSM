@@ -16,4 +16,4 @@ opt-level = "s"
 lto = true
 
 [lib]
-path = "src/main.rs"
+crate-type = ["cdylib", "lib"]

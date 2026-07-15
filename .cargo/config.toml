@@ -3,4 +3,4 @@
 rustflags = []
 
 [target.bpfel-unknown-none]
-rustflags = ["-C", "link-arg=-z", "nostart-stop-gc"]
+rustflags = ["-Clink-arg=-z", "-Clink-arg=nostart-stop-gc"]

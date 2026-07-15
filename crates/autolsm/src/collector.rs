@@ -19,8 +19,7 @@ pub async fn run(
     tracing::info!("Loading eBPF programs (ringbuf={} bytes)", ringbuf_size);
 
     let elf_path = std::env::var("AUTOLSM_EBPF_PATH")
-        .unwrap_or_else(|_| format!("{}/autolsm_ebpf", env!("OUT_DIR")));
-
+        .unwrap_or_else(|_| "crates/autolsm-ebpf/autolsm.bpf.o".to_string());
     let mut bpf = if std::path::Path::new(&elf_path).exists() {
         EbpfLoader::new()
             .map_max_entries("TARGET_CGROUPS", 256)
