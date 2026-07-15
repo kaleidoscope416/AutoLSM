@@ -31,7 +31,7 @@ impl Resolver {
         let tgid_copy = tgid;
         let result = tokio::task::spawn_blocking(move || Self::resolve_sync(tgid_copy))
             .await
-            .unwrap_or_else(|_| ("unknown_t".into(), "unknown_t".into()));
+            .unwrap_or_else(|_| ("unconfined_u:unconfined_r:unconfined_t:s0".into(), "unconfined_t".into()));
 
         self.cache.put(
             tgid,
@@ -49,14 +49,14 @@ impl Resolver {
             Ok(ctx) => {
                 let ctx = ctx.trim().to_string();
                 if ctx.is_empty() {
-                    return ("unknown_t".into(), "unknown_t".into());
+                    return ("unconfined_u:unconfined_r:unconfined_t:s0".into(), "unconfined_t".into());
                 }
                 let short = extract_type(&ctx);
                 (ctx, short)
             }
             Err(e) => {
                 tracing::debug!("failed to read {}: {}", path, e);
-                ("unknown_t".into(), "unknown_t".into())
+                ("unconfined_u:unconfined_r:unconfined_t:s0".into(), "unconfined_t".into())
             }
         }
     }
