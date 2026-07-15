@@ -77,7 +77,7 @@ impl AuditConsumer {
         Ok(denials)
     }
 
-    fn parse_avc_line(line: &str) -> Option<AvcDenial> {
+    pub fn parse_avc_line(line: &str) -> Option<AvcDenial> {
         if !line.contains("type=AVC") || !line.contains("denied") {
             return None;
         }

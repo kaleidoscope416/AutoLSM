@@ -5,15 +5,11 @@
 //!   Loop B (Drift):     AVC denied → PreFilter → normalize → LLM → Δpolicy
 //!   Loop C (Alert):     LLM anomaly + PreFilter deny → alert channel
 
-mod audit;
-mod collector;
-mod llm;
-mod state_machine;
-mod normalizer;
-mod resolver;
-mod selinux;
-mod store;
-mod validator;
+// Modules are declared in lib.rs; main.rs uses them through the library.
+// This file is the binary entry point.
+
+// Import library modules
+use autolsm::{audit, collector, llm, normalizer, resolver, selinux, state_machine, store, validator};
 
 use anyhow::Context;
 use clap::Parser;
