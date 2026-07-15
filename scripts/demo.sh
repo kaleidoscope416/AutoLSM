@@ -54,6 +54,9 @@ RUSTC_BOOTSTRAP=1 cargo run --bin autolsm -- \
     --tmp-dir /tmp/autolsm \
     --demo-mode \
     --log-level info \
+    --llm-endpoint https://api.openai.com/v1 \                                                                                        
+    --llm-model gpt-4o \                                                                                                              
+    --llm-key sk-xxx \
     2>&1 | tee /tmp/autolsm-demo.log &
 DAEMON_PID=$!
 sleep 6
