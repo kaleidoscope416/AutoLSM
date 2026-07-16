@@ -24,7 +24,7 @@ warn() { echo -e "  ${YELLOW}⚠${NC}  $*"; }
 cd /root/AutoLSM
 export RUSTC_BOOTSTRAP=1
 MY_CGID=$(stat -c %i /sys/fs/cgroup$(cat /proc/self/cgroup | head -1 | cut -d: -f3))
-rm -f /tmp/autolsm/*.cil /tmp/autolsm-demo.log
+rm -f /tmp/autolsm/*.cil /tmp/autolsm-demo.log 2>/dev/null
 mkdir -p /tmp/autolsm
 
 # 构建 LLM 参数
@@ -87,7 +87,7 @@ sleep 6
 info "eBPF hook attach 状态:"
 grep "attached LSM hook" /tmp/autolsm-demo.log | while read line; do
     echo -e "    ${GREEN}✓${NC} $line"
-done
+done || true
 grep "collector running" /tmp/autolsm-demo.log >/dev/null 2>&1 && \
     info "Collector 运行中 — RingBuf 等待事件" || warn "Collector 未启动"
 
@@ -108,7 +108,7 @@ echo ""
 info "=== eBPF 采集 (每 2s 一批) ==="
 grep "emitting batch" /tmp/autolsm-demo.log | while read line; do
     echo -e "    ${GREEN}📊${NC} $line"
-done
+done || true
 
 echo ""
 if $USE_LLM; then
@@ -124,7 +124,7 @@ else
 fi
 grep "LLM response" /tmp/autolsm-demo.log | while read line; do
     echo -e "    ${GREEN}🧠${NC} $line"
-done
+done || true
 
 echo ""
 info "=== 校验结果 (Validator 7 项检查) ==="
@@ -134,7 +134,7 @@ grep "validation" /tmp/autolsm-demo.log | while read line; do
     elif echo "$line" | grep -q "failed"; then
         echo -e "    ${RED}✗${NC} $line"
     fi
-done
+done || true
 
 # ════════════════════════════════════════════════════════════════════════
 stage "Stage 5: 策略下发 → SELinux 内核"
@@ -142,9 +142,14 @@ stage "Stage 5: 策略下发 → SELinux 内核"
 
 echo ""
 info "生成的 CIL 策略文件 (JSON → CIL 确定性转换):"
-cat /tmp/autolsm/*.cil 2>/dev/null | head -8 | while read line; do
-    echo -e "    ${CYAN}${line}${NC}"
-done
+shopt -s nullglob; CIL_FILES=(/tmp/autolsm/*.cil); shopt -u nullglob
+if [ ${#CIL_FILES[@]} -gt 0 ]; then
+    cat "${CIL_FILES[@]}" 2>/dev/null | head -8 | while read line; do
+        echo -e "    ${CYAN}${line}${NC}"
+    done
+else
+    echo -e "    ${YELLOW}(CIL 文件已被 daemon 自动清理)${NC}"
+fi
 
 echo ""
 info "SELinux 已安装模块 (autolsm_*):"
@@ -191,13 +196,13 @@ echo ""
 info "=== 漂移检测 — AuditConsumer 读取 AVC 拒绝 ==="
 grep "audit consumer\|AVC\|denial\|PreFilter\|drift" /tmp/autolsm-demo.log | while read line; do
     echo -e "    ${YELLOW}🔍${NC} $line"
-done
+done || true
 
 echo ""
 info "=== 漂移批处理 — Normalizer 合并拒绝 + 观测 ==="
 grep "\[DRIFT\]" /tmp/autolsm-demo.log | while read line; do
     echo -e "    ${YELLOW}🔄${NC} $line"
-done
+done || true
 
 echo ""
 info "=== LLM 策略精炼 (RefinePolicy) ==="
@@ -208,7 +213,7 @@ if $USE_LLM; then
 fi
 grep "refine\|Refine\|DRIFT DETECTED" /tmp/autolsm-demo.log | while read line; do
     echo -e "    ${GREEN}🧠${NC} $line"
-done
+done || true
 
 echo ""
 info "=== 漂移驱动的策略增量 (Δpolicy) ==="
@@ -218,7 +223,7 @@ grep "policy installed\|semodule -i\|rolling back" /tmp/autolsm-demo.log | tail 
     else
         echo -e "    ${YELLOW}${line}${NC}"
     fi
-done
+done || true
 # ════════════════════════════════════════════════════════════════════════
 stage "演示完成 — 数据流回顾"
 # ════════════════════════════════════════════════════════════════════════
