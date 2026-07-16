@@ -36,34 +36,48 @@ impl PolicyLoader {
         tokio::fs::write(&cil_path, &cil).await
             .map_err(|e| PolicyError::Io(e.to_string()))?;
 
+        let mut child = Command::new("semodule")
+            .arg("-i")
+            .arg(&cil_path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| PolicyError::Io(e.to_string()))?;
+
+        let child_id = child.id().ok_or(PolicyError::Io("child has no pid".into()))?;
+
         let output = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            Command::new("semodule")
-                .arg("-i")
-                .arg(&cil_path)
-                .output(),
+            child.wait_with_output(),
         ).await;
 
-        // Clean up temp file
-        let _ = tokio::fs::remove_file(&cil_path).await;
-
+        // Kill the child if it timed out
         match output {
             Ok(Ok(out)) => {
                 if !out.status.success() {
                     let stderr = String::from_utf8_lossy(&out.stderr);
                     tracing::error!("semodule -i failed: {}", stderr);
-                    let _ = Command::new("semodule")
-                        .args(["-r", &module_name]).output().await;
+                    let _ = tokio::fs::remove_file(&cil_path).await;
                     return Err(PolicyError::InstallFailed(stderr.to_string()));
                 }
+                // Clean up temp file
+                let _ = tokio::fs::remove_file(&cil_path).await;
                 let mut store = self.store.lock().await;
                 store.commit(module_name.clone(), cil);
                 tracing::info!("policy module {} installed successfully", module_name);
                 Ok(module_name)
             }
-            Ok(Err(e)) => Err(PolicyError::Io(e.to_string())),
+            Ok(Err(e)) => {
+                let _ = tokio::fs::remove_file(&cil_path).await;
+                Err(PolicyError::Io(e.to_string()))
+            }
             Err(_) => {
-                tracing::error!("semodule -i timed out after 10s");
+                let _ = tokio::process::Command::new("kill")
+                    .arg("-9")
+                    .arg(child_id.to_string())
+                    .output().await;
+                let _ = tokio::fs::remove_file(&cil_path).await;
+                tracing::error!("semodule -i timed out after 10s — killed pid {}", child_id);
                 Err(PolicyError::Timeout)
             }
         }
