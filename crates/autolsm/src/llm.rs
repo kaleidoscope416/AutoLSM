@@ -247,6 +247,12 @@ pub async fn run(
                 }
             }
         };
+        tracing::info!(
+            "LLM response: {} allow rules, {} alerts, confidence={:.2}",
+            response.allow_rules.len(),
+            response.alerts.len(),
+            response.confidence,
+        );
 
         // Check confidence threshold
         if response.confidence < 0.7 {

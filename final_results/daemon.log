@@ -1,0 +1,76 @@
+   Compiling autolsm v0.1.0 (/root/AutoLSM/crates/autolsm)
+warning: unused import: `NormalizedAccess`
+ --> crates/autolsm/src/llm.rs:2:56
+  |
+2 | ...est, LlmResponse, LlmTask, NormalizedAccess, NormalizedBatch};
+  |                               ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> crates/autolsm/src/selinux.rs:39:13
+   |
+39 |         let mut child = Command::new("semodule")
+   |             ----^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `cil_content` and `installed_at` are never read
+  --> crates/autolsm/src/store.rs:14:5
+   |
+12 | struct Activation {
+   |        ---------- fields in this struct
+13 |     version: String,
+14 |     cil_content: String,
+   |     ^^^^^^^^^^^
+15 |     installed_at: Instant,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `autolsm` (lib) generated 3 warnings (run `cargo fix --lib -p autolsm` to apply 2 suggestions)
+warning: unused imports: `state_machine` and `validator`
+  --> crates/autolsm/src/main.rs:12:81
+   |
+12 | ...linux, simple_gen, state_machine, store, validator};
+   |                       ^^^^^^^^^^^^^         ^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `autolsm` (bin "autolsm") generated 1 warning (run `cargo fix --bin "autolsm" -p autolsm` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.11s
+     Running `target/debug/autolsm --target-cgroups 35121 --batch-window-s 2 --tmp-dir /tmp/autolsm --demo-mode`
+[2m2026-07-16T12:02:55.684692Z[0m [32m INFO[0m [2mautolsm[0m[2m:[0m AutoLSM daemon starting (version 0.1.0)
+[2m2026-07-16T12:02:55.684855Z[0m [32m INFO[0m [2mautolsm[0m[2m:[0m All tasks started — waiting for Ctrl+C
+[2m2026-07-16T12:02:55.684880Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m Loading eBPF programs (ringbuf=262144 bytes)
+[2m2026-07-16T12:02:55.684978Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m normalizer started (window=2s, batch_max=64)
+[2m2026-07-16T12:02:55.685029Z[0m [32m INFO[0m [2mautolsm::llm[0m[2m:[0m LLM loop started
+[2m2026-07-16T12:02:55.715091Z[0m [32m INFO[0m [2mautolsm::audit[0m[2m:[0m audit consumer started (path=/var/log/audit/audit.log)
+[2m2026-07-16T12:02:55.977144Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m attached LSM hook: file_open
+[2m2026-07-16T12:02:55.983654Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m attached LSM hook: file_permission
+[2m2026-07-16T12:02:55.992671Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m attached LSM hook: socket_bind
+[2m2026-07-16T12:02:56.001649Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m attached LSM hook: socket_connect
+[2m2026-07-16T12:02:56.010651Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m attached LSM hook: task_setrlimit
+[2m2026-07-16T12:02:56.010697Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m added target cgroup: 35121
+[2m2026-07-16T12:02:56.010800Z[0m [32m INFO[0m [2mautolsm::collector[0m[2m:[0m collector running — 1 target cgroups, 5 hooks
+[2m2026-07-16T12:02:57.693776Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 6 events (6 new) [DRIFT]
+[2m2026-07-16T12:02:57.696137Z[0m [32m INFO[0m [2mautolsm::llm[0m[2m:[0m LLM loop: received batch of 6 events [DRIFT DETECTED]
+[2m2026-07-16T12:02:57.696262Z[0m [31mERROR[0m [2mautolsm::llm[0m[2m:[0m validation failed: unknown perm 'checkpoint_restore' for class 'capability2' — skipping install
+[2m2026-07-16T12:02:59.686791Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 2 events (0 new)
+[2m2026-07-16T12:02:59.690715Z[0m [32m INFO[0m [2mautolsm::llm[0m[2m:[0m LLM loop: received batch of 2 events
+[2m2026-07-16T12:02:59.690811Z[0m [32m INFO[0m [2mautolsm::llm[0m[2m:[0m validation passed — 1 rules approved
+[2m2026-07-16T12:02:59.690873Z[0m [32m INFO[0m [2mautolsm::selinux[0m[2m:[0m installing policy module autolsm_1784203379 (1 rules, 60 bytes CIL)
+[2m2026-07-16T12:03:01.688336Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 2 events (0 new)
+[2m2026-07-16T12:03:03.686229Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 2 events (0 new)
+[2m2026-07-16T12:03:05.688846Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 2 events (0 new)
+[2m2026-07-16T12:03:07.693767Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 2 events (0 new)
+[2m2026-07-16T12:03:09.691672Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 2 events (0 new)
+[2m2026-07-16T12:03:10.169249Z[0m [32m INFO[0m [2mautolsm::store[0m[2m:[0m policy committed: autolsm_1784203379 (history: 1/10)
+[2m2026-07-16T12:03:10.169297Z[0m [32m INFO[0m [2mautolsm::selinux[0m[2m:[0m policy module autolsm_1784203379 installed successfully
+[2m2026-07-16T12:03:10.169317Z[0m [32m INFO[0m [2mautolsm::llm[0m[2m:[0m policy installed: autolsm_1784203379
+[2m2026-07-16T12:03:10.169359Z[0m [32m INFO[0m [2mautolsm::llm[0m[2m:[0m LLM loop: received batch of 2 events
+[2m2026-07-16T12:03:10.169429Z[0m [32m INFO[0m [2mautolsm::llm[0m[2m:[0m validation passed — 1 rules approved
+[2m2026-07-16T12:03:10.169476Z[0m [32m INFO[0m [2mautolsm::selinux[0m[2m:[0m installing policy module autolsm_1784203390 (1 rules, 60 bytes CIL)
+[2m2026-07-16T12:03:11.700922Z[0m [32m INFO[0m [2mautolsm::normalizer[0m[2m:[0m emitting batch: 2 events (0 new)
