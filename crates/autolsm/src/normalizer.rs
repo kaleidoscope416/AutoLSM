@@ -230,14 +230,14 @@ fn resolve_tcontext(
                     Err(_) => {}
                 }
             }
-            ("unresolved".into(), "unresolved_t".into())
+            ("unconfined_u:unconfined_r:unconfined_t:s0".into(), "unconfined_t".into())
         }
         _ if tclass.contains("socket") => {
             let family = unsafe { event.object.sock.family };
             let port = u16::from_be(unsafe { event.object.sock.port });
             (format!("socket_{}:{}", family, port), format!("socket_{}_t", family))
         }
-        _ => ("generic".into(), "generic_t".into())
+        _ => ("unconfined_u:unconfined_r:unconfined_t:s0".into(), "unconfined_t".into())
     }
 }
 

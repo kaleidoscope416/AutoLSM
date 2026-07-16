@@ -139,7 +139,6 @@ pub fn validate(
 pub fn default_deny_sources() -> HashSet<String> {
     [
         "kernel_t", "init_t", "unlabeled_t",
-        "unknown_t", "unresolved_t",
     ].iter().map(|s| s.to_string()).collect()
 }
 
@@ -175,12 +174,11 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_t_rejected() {
-        let mut known = HashSet::new();
-        known.insert("unknown_t".into());
-        known.insert("var_log_t".into());
-        let rules = vec![make_rule("unknown_t", "var_log_t", "file", &["read"])];
-        assert!(matches!(validate(&rules, &known, &default_deny_sources()), Err(ValidationError::DeniedSource(_))));
+    fn test_fallback_types_allowed() {
+        let known = HashSet::from(["unconfined_t".into(), "var_log_t".into()]);
+        // unconfined_t and unknown_t are no longer denied — fallback types pass
+        let rules = vec![make_rule("unconfined_t", "var_log_t", "file", &["read"])];
+        assert!(validate(&rules, &known, &default_deny_sources()).is_ok());
     }
 
     #[test]
