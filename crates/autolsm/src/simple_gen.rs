@@ -22,8 +22,9 @@ impl crate::llm::PolicyGenerator for SimplePolicyGenerator {
         let mut grouped: HashMap<(&str, &str, &str), (Vec<String>, &str)> = HashMap::new();
 
         for evt in &req.normalized_events {
-            // Skip unresolved/generic types — these mean matchpathcon or resolver failed
+            // Skip unresolved/generic/unknown types — these mean matchpathcon or resolver failed
             if evt.scontext_type == "unknown_t"
+                || evt.tcontext_type == "unknown_t"
                 || evt.tcontext_type == "generic_t"
                 || evt.tcontext_type == "unresolved_t"
             {

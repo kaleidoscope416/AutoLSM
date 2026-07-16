@@ -267,11 +267,14 @@ pub async fn run(
             }
             continue;
         }
-        // Build known_types from the events
+        // Build known_types from the events — exclude sentinel types
+        let sentinels: &[&str] = &["unknown_t", "generic_t", "unresolved_t"];
         let mut known_types = std::collections::HashSet::new();
         for event in &events {
-            known_types.insert(event.scontext_type.clone());
-            known_types.insert(event.tcontext_type.clone());
+            let st = event.scontext_type.as_str();
+            let tt = event.tcontext_type.as_str();
+            if !sentinels.contains(&st) { known_types.insert(st.to_string()); }
+            if !sentinels.contains(&tt) { known_types.insert(tt.to_string()); }
         }
 
         // Validate

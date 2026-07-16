@@ -118,8 +118,8 @@ async fn process_observation(
     // Resolve tcontext
     let (tcontext, tcontext_type) = resolve_tcontext(event, hook, &tclass);
 
-    // Drop unresolved events per architecture §4.2.2
-    if tcontext_type == "unresolved_t" {
+    // Drop unresolved/generic/unknown events — sentinel types that indicate resolution failure
+    if tcontext_type == "unresolved_t" || tcontext_type == "unknown_t" || tcontext_type == "generic_t" {
         return;
     }
 

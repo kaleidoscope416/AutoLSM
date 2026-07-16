@@ -48,6 +48,13 @@ pub fn valid_perms_for_class(class: &str) -> &'static [&'static str] {
     }
 }
 
+/// Sentinel types that indicate a resolution failure — never allow rules with these types.
+const SENTINEL_TYPES: &[&str] = &["unknown_t", "generic_t", "unresolved_t"];
+
+fn is_sentinel_type(t: &str) -> bool {
+    SENTINEL_TYPES.contains(&t)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ValidationError {
     #[error("wildcard in source_type: {0}")]
@@ -58,8 +65,8 @@ pub enum ValidationError {
     WildcardClass,
     #[error("wildcard in perm: {0}")]
     WildcardPerm(String),
-    #[error("target_type must not be unconfined_t")]
-    UnconfinedTarget,
+    // #[error("target_type must not be unconfined_t")] — removed; unconfined_t allowed in observer mode
+    // UnconfinedTarget,
     #[error("unknown SELinux type: {0}")]
     UnknownType(String),
     #[error("source_type {0} is in deny list")]
@@ -96,8 +103,13 @@ pub fn validate(
                 return Err(ValidationError::WildcardPerm(perm.clone()));
             }
         }
-        // 2) Unconfined target — allowed in observer/demo mode
-        // (skip unconfined_t check — used as resolver fallback)
+        // 2) Sentinel types — always reject (resolution failure sentinels)
+        if is_sentinel_type(&rule.source_type) {
+            return Err(ValidationError::DeniedSource(rule.source_type.clone()));
+        }
+        if is_sentinel_type(&rule.target_type) {
+            return Err(ValidationError::DeniedTarget(rule.target_type.clone()));
+        }
         // 3) Type existence
         if !known_types.contains(&rule.source_type) {
             return Err(ValidationError::UnknownType(rule.source_type.clone()));
