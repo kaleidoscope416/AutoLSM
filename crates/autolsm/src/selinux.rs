@@ -88,7 +88,7 @@ impl PolicyLoader {
     }
 
     fn to_cil(rules: &[AllowRule]) -> String {
-        let mut cil = String::from("(handleunknown allow)\n\n");
+        let mut cil = String::new();
         let mut grouped: std::collections::HashMap<(&str, &str, &str), Vec<&str>> =
             std::collections::HashMap::new();
         for rule in rules {

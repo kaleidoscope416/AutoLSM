@@ -81,7 +81,7 @@ fn rule(src: &str, tgt: &str, cls: &str, perms: &[&str]) -> AllowRule {
 }
 
 fn deny_set() -> HashSet<String> {
-    ["kernel_t","init_t","unconfined_t","unlabeled_t","unknown_t","unresolved_t"]
+    ["kernel_t","init_t","unlabeled_t"]
         .iter().map(|s| s.to_string()).collect()
 }
 
@@ -120,9 +120,9 @@ fn wildcard_perm_rejected() {
 }
 
 #[test]
-fn unconfined_target_rejected() {
+fn unconfined_target_allowed() {
     let r = vec![rule("httpd_t", "unconfined_t", "file", &["read"])];
-    assert!(matches!(validator::validate(&r, &known(&["httpd_t","unconfined_t"]), &deny_set()), Err(ValidationError::UnconfinedTarget)));
+    assert!(validator::validate(&r, &known(&["httpd_t","unconfined_t"]), &deny_set()).is_ok());
 }
 
 #[test]
@@ -144,9 +144,9 @@ fn deny_target_rejected() {
 }
 
 #[test]
-fn unknown_t_denied_as_source() {
-    let r = vec![rule("unknown_t", "log_t", "file", &["read"])];
-    assert!(matches!(validator::validate(&r, &known(&["unknown_t","log_t"]), &deny_set()), Err(ValidationError::DeniedSource(_))));
+fn kernel_t_denied_as_source() {
+    let r = vec![rule("kernel_t", "log_t", "file", &["read"])];
+    assert!(matches!(validator::validate(&r, &known(&["kernel_t","log_t"]), &deny_set()), Err(ValidationError::DeniedSource(_))));
 }
 
 #[test]

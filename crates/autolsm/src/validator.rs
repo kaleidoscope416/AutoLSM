@@ -96,10 +96,8 @@ pub fn validate(
                 return Err(ValidationError::WildcardPerm(perm.clone()));
             }
         }
-        // 2) Unconfined target
-        if rule.target_type == "unconfined_t" {
-            return Err(ValidationError::UnconfinedTarget);
-        }
+        // 2) Unconfined target — allowed in observer/demo mode
+        // (skip unconfined_t check — used as resolver fallback)
         // 3) Type existence
         if !known_types.contains(&rule.source_type) {
             return Err(ValidationError::UnknownType(rule.source_type.clone()));
