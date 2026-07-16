@@ -1,6 +1,6 @@
 # 远程验收报告 — AutoLSM 自适应 SELinux 安全策略框架
 
-**服务器**: 43.137.50.63 (OpenCloudOS 9.6, kernel 6.6.119, `selinux,bpf` LSM)  
+**服务器**:(OpenCloudOS 9.6, kernel 6.6.119, `selinux,bpf` LSM)  
 **时间**: 2026-07-15 19:11–19:20 CST  
 
 ---
