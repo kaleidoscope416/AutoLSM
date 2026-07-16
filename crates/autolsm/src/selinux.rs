@@ -47,7 +47,7 @@ impl PolicyLoader {
         let child_id = child.id().ok_or(PolicyError::Io("child has no pid".into()))?;
 
         let output = tokio::time::timeout(
-            std::time::Duration::from_secs(10),
+            std::time::Duration::from_secs(30),
             child.wait_with_output(),
         ).await;
 
